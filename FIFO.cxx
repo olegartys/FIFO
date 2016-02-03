@@ -29,10 +29,27 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <cstring>
+#include <signal.h>
 
 #define BUF_SIZE 256
 #define FIFO_READ "in.fifo"
 #define FIFO_WRITE "out.fifo"
+
+int fd_read, fd_write = -1;
+
+void finish() {
+	puts("HERE");
+	unlink(FIFO_READ);
+	unlink(FIFO_WRITE);
+	
+	close(fd_read);
+	close(fd_write);
+}
+
+void f(int signo) {
+	finish();
+	exit(0);
+}
 
 int main(int argc, char **argv)
 {
@@ -51,18 +68,27 @@ int main(int argc, char **argv)
 	}	
 	
 	// Open fifo
-	int fd_write = -1;
-	int fd_read = open(FIFO_READ, O_RDONLY | O_NONBLOCK, 0666);
+	//int fd_write = -1;
+	fd_read = open(FIFO_READ, O_RDONLY | O_NONBLOCK, 0666);
 	if (fd_read < 0) {
 		perror(argv[0]);
 		exit(errno);
 	}
 	
+	signal(SIGPIPE, f);
+	
 	// Reading and writing
 	char buf[BUF_SIZE] = {0};
 	while (1) {
 		//memset(buf, '\0', sizeof(char)*BUF_SIZE);
-		while ((read(fd_read, buf, BUF_SIZE)) != 0) {
+		//ssize_t n = read(fd_read, buf, BUF_SIZE);
+		ssize_t n;
+		while ((n = read(fd_read, buf, BUF_SIZE)) != 0) {
+			/*if ((n == -1) && (fd_write != -1) && (errno != EAGAIN)) {
+				perror("read");
+				exit(errno);
+			}*/
+			
 			// On first iteration open write pipe
 			if (fd_write == -1) {
 				fd_write = open(FIFO_WRITE, O_WRONLY, 0666);
@@ -86,12 +112,7 @@ int main(int argc, char **argv)
 		}
 	}
 	
-	//puts("HERE");
-	unlink(FIFO_READ);
-	unlink(FIFO_WRITE);
-	
-	close(fd_read);
-	close(fd_write);
+	finish();
 	
 	return 0;
 }
